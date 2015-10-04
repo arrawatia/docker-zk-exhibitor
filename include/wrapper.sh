@@ -2,12 +2,15 @@
 
 # Generates the default exhibitor config and launches exhibitor
 
-MISSING_VAR_MESSAGE="must be set"
+IP=$(hostname -i)
 DEFAULT_AWS_REGION="us-west-2"
 DEFAULT_DATA_DIR="/opt/zookeeper/snapshots"
 DEFAULT_LOG_DIR="/opt/zookeeper/transactions"
 S3_SECURITY=""
 HTTP_PROXY=""
+DEFAULT_CONFIG_TYPE="FILE"
+DEFAULT_CONFIG_CHECK_MS="30000"
+: ${CONFIG_TYPE:=$DEFAULT_CONFIG_TYPE}
 : ${HOSTNAME:?$MISSING_VAR_MESSAGE}
 : ${AWS_REGION:=$DEFAULT_AWS_REGION}
 : ${ZK_DATA_DIR:=$DEFAULT_DATA_DIR}
@@ -16,6 +19,10 @@ HTTP_PROXY=""
 : ${HTTP_PROXY_PORT:=""}
 : ${HTTP_PROXY_USERNAME:=""}
 : ${HTTP_PROXY_PASSWORD:=""}
+: ${CONFIG_CHECK_MS:=$DEFAULT_CONFIG_CHECK_MS}
+: ${ZK_POLLING_MS:="10000"}
+: ${ZK_RETRY_SLEEP_MS:="1000"}
+: ${ZK_RETRY_TIMES:="3"}
 
 cat <<- EOF > /opt/exhibitor/defaults.conf
 	zookeeper-data-directory=$ZK_DATA_DIR
@@ -23,7 +30,7 @@ cat <<- EOF > /opt/exhibitor/defaults.conf
 	zookeeper-log-directory=$ZK_LOG_DIR
 	log-index-directory=$ZK_LOG_DIR
 	cleanup-period-ms=300000
-	check-ms=30000
+	check-ms=$CONFIG_CHECK_MS
 	backup-period-ms=600000
 	client-port=2181
 	cleanup-max-files=20
@@ -36,8 +43,17 @@ cat <<- EOF > /opt/exhibitor/defaults.conf
 	auto-manage-instances=1
 EOF
 
+echo "Enviornment : "
+echo `env`
 
-if [[ -n ${AWS_ACCESS_KEY_ID} ]]; then
+if [ "$CONFIG_TYPE" == "ZK" ]
+then
+
+	BACKUP_CONFIG="--configtype zookeeper --zkconfigconnect ${ZK_CONNECT} --zkconfigpollms ${ZK_POLLING_MS} --zkconfigzpath ${ZK_CONFIG_PATH}"
+	BACKUP_CONFIG=${BACKUP_CONFIG}" --zkconfigretry ${ZK_RETRY_SLEEP_MS}:${ZK_RETRY_TIMES} --filesystembackup true"
+
+elif [ "${CONFIG_TYPE}" == "S3" ]
+then
   cat <<- EOF > /opt/exhibitor/credentials.properties
     com.netflix.exhibitor.s3.access-key-id=${AWS_ACCESS_KEY_ID}
     com.netflix.exhibitor.s3.access-secret-key=${AWS_SECRET_ACCESS_KEY}
@@ -47,6 +63,7 @@ EOF
 
   S3_SECURITY="--s3credentials /opt/exhibitor/credentials.properties"
   BACKUP_CONFIG="--configtype s3 --s3config ${S3_BUCKET}:${S3_PREFIX} ${S3_SECURITY} --s3region ${AWS_REGION} --s3backup true"
+
 else
   BACKUP_CONFIG="--configtype file --fsconfigdir /opt/zookeeper/local_configs --filesystembackup true"
 fi
@@ -68,7 +85,6 @@ EOF
     HTTP_PROXY="--s3proxy=/opt/exhibitor/proxy.properties"
 fi
 
-
 exec 2>&1
 
 # If we use exec and this is the docker entrypoint, Exhibitor fails to kill the ZK process on restart.
@@ -82,9 +98,12 @@ exec 2>&1
 # 	--s3credentials /opt/exhibitor/credentials.properties \
 # 	--s3region us-west-2 --s3backup true
 
+echo "CONFIG:"
+echo ${BACKUP_CONFIG}
+
 java -jar /opt/exhibitor/exhibitor.jar \
   --port 8181 --defaultconfig /opt/exhibitor/defaults.conf \
   ${BACKUP_CONFIG} \
   ${HTTP_PROXY} \
-  --hostname ${HOSTNAME} \
+  --hostname ${IP} \
   ${SECURITY}
