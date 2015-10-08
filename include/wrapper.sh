@@ -49,18 +49,10 @@ if [ "$CONFIG_TYPE" == "ZK" ]
 then
     : ${ZKCFG_CONNECT?"Need to set ZK_CONNECT"}
     : ${ZKCFG_POLLING_MS:="10000"}
-    : ${KUBERNETES_NAMESPACE:=""}
     : ${ZKCFG_ZPATH:="/exhibitor"}
     : ${ZKCFG_RETRY_SLEEP_MS:="1000"}
     : ${ZKCFG_RETRY_TIMES:="3"}
-    if [ -n "${KUBERNETES_NAMESPACE}"]
-    then
-        ZKCFG_ZPATH_ROOT=""
-    else
-        ZKCFG_ZPATH_ROOT="/${KUBERNETES_NAMESPACE}"
-    fi
-    ZK_CONFIG_ZPATH="${ZKCFG_ZPATH_ROOT}${ZKCFG_ZPATH}"
-    BACKUP_CONFIG="--configtype zookeeper --zkconfigconnect ${ZKCFG_CONNECT} --zkconfigpollms ${ZKCFG_POLLING_MS} --zkconfigzpath ${ZK_CONFIG_ZPATH}"
+    BACKUP_CONFIG="--configtype zookeeper --zkconfigconnect ${ZKCFG_CONNECT} --zkconfigpollms ${ZKCFG_POLLING_MS} --zkconfigzpath ${ZKCFG_ZPATH}"
     BACKUP_CONFIG=${BACKUP_CONFIG}" --zkconfigretry ${ZKCFG_RETRY_SLEEP_MS}:${ZKCFG_RETRY_TIMES} --filesystembackup true"
 
 elif [ "${CONFIG_TYPE}" == "S3" ]
